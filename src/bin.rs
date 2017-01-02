@@ -5,8 +5,21 @@ use std::fs::File;
 use std::path::Path;
 use std::error::Error;
 use std::io::Read;
+use std::io::Cursor;
+use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 
 mod lookup;
+
+struct Header {
+  magic_bytes: Vec<u8>,
+  class: u8,
+  data_endianness: u8,
+  version: u8,
+  osabi: u8,
+  abi_version: u8,
+  binary_type: u16,
+  machine: u16
+}
 
 struct ByteBuf<'a>(&'a [u8]);
 
@@ -24,10 +37,47 @@ impl<'a> std::fmt::LowerHex for ByteBuf<'a> {
     }
 }
 
-fn main() {
-  println!("***ELF parser***\n\nResult:");
-  let input = env::args().nth(1);
+fn parse(file: File) -> Header {
+  let bytes: Vec<_> = file.bytes().map(|x| x.unwrap()).collect();
+
+  let mut magic_bytes = vec![0; 4];
+  magic_bytes[..4].copy_from_slice(&bytes[0 .. 4]);
+
+  // endianness for reading remaining data
+  let data_endianness = bytes[5]; // endianness
+
+  let binary_type_slice = &bytes[16 .. 18];
+  let mut binary_type_rdr = Cursor::new(binary_type_slice.to_vec());
+  let binary_type = match data_endianness {
+      0x01 => binary_type_rdr.read_u16::<LittleEndian>().unwrap(),
+      0x02 => binary_type_rdr.read_u16::<BigEndian>().unwrap(),
+      _    => panic!("Error: unknown endianness")
+  };
+
+  let isa_slice = &bytes[18 .. 20]; // instruction set
+  let mut isa_rdr = Cursor::new(isa_slice.to_vec());
+  let isa = match data_endianness {
+      0x01 => isa_rdr.read_u16::<LittleEndian>().unwrap(),
+      0x02 => isa_rdr.read_u16::<BigEndian>().unwrap(),
+      _    => panic!("Error: unknown endianness")
+  };
+  Header {
+    magic_bytes: magic_bytes,
+    class: bytes[4], // 32-bit or 64-bit
+    data_endianness: data_endianness, // endianness
+    version: bytes[6],
+    osabi: bytes[7],
+    abi_version: bytes[8],
+    // pad: &bytes[9 .. 15], // unused
+    binary_type: binary_type,
+    machine: isa // instruction set
+  }
+}
+
+fn open_file(input: Option<String>) -> Option<File> {
+
   match input {
+
     Some(x) => {
 
       // Create a path to the desired file
@@ -38,32 +88,32 @@ fn main() {
       match File::open(&path) {
         Err(why) => panic!("couldn't open {}: {}", display,
                                                    why.description()),
-        Ok(file) => {
-          let bytes: Vec<_> = file.bytes().map(|x| x.unwrap()).collect();
-          let magic_bytes = &bytes[0 .. 4];
-          println!("Magic bytes: {:x}", ByteBuf(magic_bytes));
-          let class = &bytes[4]; // 32-bit or 64-bit
-          println!("Class(32- or 64-bit): {:#x}", class);
-          let data_endianness = &bytes[5]; // endianness
-          println!("Data(endianness): {:#x}", data_endianness);
-          let version = &bytes[6];
-          println!("ELF Version: {:#x}", version);
-          let osabi = &bytes[7];
-          println!("OS ABI: {}", lookup::lookup_osabi(osabi));
-          let abi_version = &bytes[8];
-          println!("ABI Version: {:#x}", abi_version);
-          // let pad = &bytes[9 .. 15]; // unused
-          let binary_type_slice = &bytes[16 .. 18];
-          println!("Binary Type: {}", lookup::lookup_binary_type(&binary_type_slice, data_endianness));
-          let instruction_set_slice = &bytes[18 .. 20];
-          println!("Instruction Set: {}", lookup::lookup_isa(&instruction_set_slice, data_endianness));
-        }
-      };
-    }
+        Ok(file) => Some(file)
+      }
+
+    },
     None => {
-      println!("Please enter ELF binary")
+      println!("Please enter ELF binary");
+      None
     }
+
   }
+
+}
+
+fn main() {
+  println!("***ELF parser***\n\nResult:");
+  let input = env::args().nth(1);
+  let file = open_file(input).unwrap();
+  let header = parse(file);
+  println!("Magic bytes: {:x}", ByteBuf(&header.magic_bytes));
+  println!("Class(32- or 64-bit): {:#x}", header.class);
+  println!("Data(endianness): {:#x}", header.data_endianness);
+  println!("ELF Version: {:#x}", header.version);
+  println!("OS ABI: {}", lookup::lookup_osabi(header.osabi));
+  println!("ABI Version: {:#x}", header.abi_version);
+  println!("Binary Type: {}", lookup::lookup_binary_type(header.binary_type));
+  println!("Instruction Set: {}", lookup::lookup_isa(header.machine));
 }
 
 

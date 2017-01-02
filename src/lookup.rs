@@ -1,8 +1,6 @@
-use std::io::Cursor;
-use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 
-pub fn lookup_osabi(byte: &u8) -> &'static str {
-  match *byte {
+pub fn lookup_osabi(byte: u8) -> &'static str {
+  match byte {
     0x00 => "System V",
     0x01 => "HP-UX",
     0x02 => "NetBSD",
@@ -22,13 +20,7 @@ pub fn lookup_osabi(byte: &u8) -> &'static str {
   }
 }
 
-pub fn lookup_binary_type(binary_type_slice: &[u8], data_endianness: &u8) -> &'static str {
-  let mut binary_type_rdr = Cursor::new(binary_type_slice.to_vec());
-  let binary_type = match *data_endianness {
-      0x01 => binary_type_rdr.read_u16::<LittleEndian>().unwrap(),
-      0x02 => binary_type_rdr.read_u16::<BigEndian>().unwrap(),
-      _    => panic!("Error: unknown endianness")
-  };
+pub fn lookup_binary_type(binary_type: u16) -> &'static str {
   match binary_type {
     1 => "relocatable",
     2 => "executable",
@@ -38,13 +30,7 @@ pub fn lookup_binary_type(binary_type_slice: &[u8], data_endianness: &u8) -> &'s
   }
 }
 
-pub fn lookup_isa(isa_slice: &[u8], data_endianness: &u8) -> &'static str {
-  let mut isa_rdr = Cursor::new(isa_slice.to_vec());
-  let isa = match *data_endianness {
-      0x01 => isa_rdr.read_u16::<LittleEndian>().unwrap(),
-      0x02 => isa_rdr.read_u16::<BigEndian>().unwrap(),
-      _    => panic!("Error: unknown endianness")
-  };
+pub fn lookup_isa(isa: u16) -> &'static str {
   match isa {
     0x00 => "No specific instruction set",
     0x02 => "SPARC",
