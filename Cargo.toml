@@ -1,0 +1,11 @@
+[package]
+name = "elfonshelf"
+version = "0.1.0"
+authors = ["Eric S. Bullington <eric.s.bullington@gmail.com>"]
+
+[dependencies]
+byteorder = "1"
+
+[[bin]]
+name = "mybin"
+path = "src/bin.rs"
